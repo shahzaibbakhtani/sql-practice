@@ -1,0 +1,63 @@
+select team_id, sum(runs) over(partition by team_id) total_runs_per_team , 
+sum(wickets) over(partition by team_id) total_wickets_per_team from players;
+
+select team_id ,sum(runs) , sum(wickets) from players group by team_id having sum(runs) > 20000;
+
+select role , avg(runs) from players group by role;
+
+select name , team_id , wickets from players where (team_id , wickets) in 
+(select team_id ,max(wickets) from players group by team_id );
+
+select role ,count(role) from players group by role having count(role) > 1;
+
+
+select P.name , T.country from players P join team T on P.team_id = T.team_id;
+
+select P.name , P.role ,T.coach from players P join team T on P.team_id = T.team_id; 
+
+select T.country ,count(role) players_per_team from players P  join team T on P.team_id = T.team_id  group by P.team_id;
+
+select P.name , T.world_cups from players P join team T on P.team_id = T.team_id where T.world_cups > 1;
+
+select * from players as P inner join
+(select team_id, world_cups from team where world_cups >1)T
+on P.team_id = T.team_id;
+
+select T.country , count(name) from players P join team T on P.team_id = T.team_id group by P.team_id; 
+
+select T.country , P.name from players P right join team T on P.team_id = T.team_id;
+
+select name from players where name like "G%"
+union 
+select coach from team where coach Like "G%";
+
+select * from players where runs >(
+select avg(runs) from players); 
+
+select name , runs,
+(select avg(runs) from players) as avg_runs,
+runs - (select avg(runs) from players) as diff
+ from players order by runs desc;
+
+select name , runs, team_id from players
+where runs > (select avg(runs) from players) and team_id in (select team_id from team where world_cups>1)
+;
+
+select name, team_id from players where team_id in (select team_id from team where country != "Pakistan");
+
+select name , runs , rank() over(order by runs desc) ranking from players;
+
+select team_id , name , runs , rank() over(partition by team_id order by runs desc) Rank_per_team from players;
+
+select name , runs , sum(runs) over(order by runs desc) from players;
+
+select team_id ,name , runs , avg(runs) over(partition by team_id) avg_per_team,
+runs - avg(runs) over(partition by team_id) diff_per_team
+ from players order by team_id , runs desc ;
+ 
+select team_id,name , runs , sum(runs) over(partition by team_id order by runs rows between current row and unbounded following) 
+running_total from players order by team_id, runs desc ; 
+use cricket;
+select name , runs , rank() over(order by runs desc) ranking from players;
+
+
