@@ -138,3 +138,233 @@ case
 	when marks between 70 and 85 then (marks +1)
 end as "upgrade"
 from stu;
+SELECT city, AVG(marks) 
+FROM stu S JOIN subject Su 
+ON S.ID = Su.ID 
+GROUP BY city;
+
+use cricket; 
+select * from players;
+select * from team;
+
+
+select team_id, sum(runs) over(partition by team_id) total_runs_per_team , 
+sum(wickets) over(partition by team_id) total_wickets_per_team from players;
+
+select team_id ,sum(runs) , sum(wickets) from players group by team_id having sum(runs) > 20000;
+
+select role , avg(runs) from players group by role;
+
+select name , team_id , wickets from players where (team_id , wickets) in 
+(select team_id ,max(wickets) from players group by team_id );
+
+select role ,count(role) from players group by role having count(role) > 1;
+
+
+select P.name , T.country from players P join team T on P.team_id = T.team_id;
+
+select P.name , P.role ,T.coach from players P join team T on P.team_id = T.team_id; 
+
+select T.country ,count(role) players_per_team from players P  join team T on P.team_id = T.team_id  group by P.team_id;
+
+select P.name , T.world_cups from players P join team T on P.team_id = T.team_id where T.world_cups > 1;
+
+select * from players as P inner join
+(select team_id, world_cups from team where world_cups >1)T
+on P.team_id = T.team_id;
+
+select T.country , count(name) from players P join team T on P.team_id = T.team_id group by P.team_id; 
+
+select T.country , P.name from players P right join team T on P.team_id = T.team_id;
+
+select name from players where name like "G%"
+union 
+select coach from team where coach Like "G%";
+
+select * from players where runs >(
+select avg(runs) from players); 
+
+select name , runs,
+(select avg(runs) from players) as avg_runs,
+runs - (select avg(runs) from players) as diff
+ from players order by runs desc;
+
+select name , runs, team_id from players
+where runs > (select avg(runs) from players) and team_id in (select team_id from team where world_cups>1)
+;
+
+select name, team_id from players where team_id in (select team_id from team where country != "Pakistan");
+
+select name , runs , rank() over(order by runs desc) ranking from players;
+
+select team_id , name , runs , rank() over(partition by team_id order by runs desc) Rank_per_team from players;
+
+select name , runs , sum(runs) over(order by runs desc) from players;
+
+select team_id ,name , runs , avg(runs) over(partition by team_id) avg_per_team,
+runs - avg(runs) over(partition by team_id) diff_per_team
+ from players order by team_id , runs desc ;
+ 
+select team_id,name , runs , sum(runs) over(partition by team_id order by runs rows between current row and unbounded following) 
+running_total from players order by team_id, runs desc ; 
+use cricket;
+select name , runs , rank() over(order by runs desc) ranking from players;
+
+-- Parctice 28/4/26 ---
+
+use khan;
+select * from school where marks > 85; 
+
+select * from (
+select name , course , marks , max(marks) over(partition by course) maximum from school)t
+where marks = maximum;
+
+select class , max(marks) from school group by class having max(marks) > 90 order by max(marks) ; 
+
+select * from school limit 3,1;
+use saler;
+
+select * from customers;
+set sql_safe_updates = 0;
+
+select * from orders;
+
+select * from customers C left join orders O on C.ID = O.cust_id where city = "Karachi";
+select * from products;
+
+select product_name ,category,price ,sum(price) over(order by price rows between unbounded preceding and current row) Total from products;
+
+select sum(price) from products;
+
+select product_name ,category,price ,sum(price) over(order by price rows between current row and unbounded following) from products;
+
+use khan;
+select * from school;
+
+select * from (
+select ID , name , city ,marks , rank() over(partition by city order by marks desc) Ranking from school)t
+where Ranking = 1;
+
+select ID , name , city ,marks , 
+row_number() over(order by marks desc)  RN, 
+rank() over(order by marks desc) R , 
+dense_rank() over(order by marks desc) DR from school;
+
+create temporary table selection(
+select * , 
+case 
+	when Buc = 1 then "Super Star"
+    When Buc = 2 then "Star"
+    when Buc = 3 then "Work Hard"
+end Categories from (
+select ID , name , city ,marks, ntile(3) over(order by marks desc) Buc from school)t);
+
+select * from selection where Categories = "Work Hard";
+
+select * , marks - Average as diff from (
+select name , marks , avg(marks) over() as Average  from school)t order by marks desc; 
+
+
+use job;
+select *, (Income - Nexty)/Income *100 as diff from 
+(select name , Income , lead(Income) over(order by DOJ) Nexty from emp)t;
+
+use khan;
+
+select name , marks , (select avg(marks) from school)  Avg from school;
+use cricket;
+select * from players;
+
+select * from (
+select name ,runs , avg(runs) over() average from players)t
+where runs > average
+;
+
+select * from players where team_id = 2;
+
+select name , role , runs , avg(runs) over() from players where role = "Bowler";
+
+select name , runs greater_than_bowler from players 
+where runs > (select avg(runs) from players where role = "Bowler");
+
+select * , rank() over(order by Run_by_team) ranking from(
+select name , runs , sum(runs) over(partition by team_id) Run_by_team from players)t;
+
+select * from (
+select team_id , sum(runs) total, rank() over(order by sum(runs) desc) ranking from players group by team_id)t where ranking in (1,2);
+
+SELECT * FROM players
+WHERE team_id IN (
+  SELECT team_id FROM (
+    SELECT team_id, RANK() OVER(ORDER BY SUM(runs) DESC) ranking
+    FROM players
+    GROUP BY team_id
+  ) t
+  WHERE ranking IN (1, 2)
+); 
+
+select * from players P inner join (select * from team where world_cups>1)W on P.team_id = W.team_id;
+
+select name , runs , team_id from players 
+where runs > (select avg(runs) from players) and team_id in (select team_id from team where world_cups >1);
+ 
+ 
+select coalesce(salary,"millonare") from stats;
+ select name , coach_name , concat(name , " " , coalesce(coach_name,"Shahzaib")) from stats;
+ 
+
+select count(ifnull(price, prev_day_closing)), count(price) from stocks;
+
+select * from stocks;
+
+update stocks 
+set price = 190 
+where price is null;
+
+
+select price, HH ,ifnull(price,HH) HH_for_nulls from stocks;
+select price , HH ,nullif(ifnull(price,HH), HH) nuller from stocks;
+
+alter table stocks 
+rename column company_name to name;
+
+select name , ticker , price from stocks where price >
+(select avg(price) from stocks);
+
+SELECT name, ticker, price
+FROM stocks s1
+WHERE price > (
+    SELECT AVG(price)
+    FROM stocks s2
+    WHERE s1.id <> s2.id
+);
+
+select * from (
+select *, rank() over(order by price desc) ranking from stocks)t
+where ranking = 2;
+
+select * from stocks where price in (select price from stocks order by price desc limit 3);
+
+with Average as
+(select *, avg(price) over() avg from stocks)
+
+select * from Average where price > avg;
+
+create table top_three as(
+with ranker as 
+(select name , price , dense_rank() over(order by price desc ) ranking from stocks)
+
+select * from ranker where ranking <4);
+
+with stats as 
+(select * , avg(price) over()avg , max(price) over() max , min(price) over() min from stocks)
+select * from stats where price > avg and price < max;   
+
+create temporary table stats_2 as (
+select * from top_three where price > 599);
+
+select * from stats_2;
+drop table top_three;
+
+
+
