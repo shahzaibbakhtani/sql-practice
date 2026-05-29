@@ -103,23 +103,50 @@ select name,course, marks , avg(marks) over(partition by course order by marks) 
 
 select name,course, marks , avg(marks) over(partition by course order by marks rows between 1 preceding and current row) MA_per_course from  school;
 
+use aga;
+select * from school;
+
+select name , course, sum(marks)  over(partition by city) from school;
+
+select name, course, marks, avg(marks) over(partition by course) avg_per_course, 
+round(marks - avg(marks) over(partition by course),2) differnce
+from school;
+ 
+select name , marks, sum(marks) over(partition by course) Total ,
+round((marks / sum(marks) over(partition by course))*100,2) percent from school order by marks desc;
+
+select name, marks , course , city , sum(marks) over(partition by course) total_per_course,
+sum(marks) over(partition by city) total_per_city from school;
 
  
+select name, course, marks, max(marks) over(partition by course) Max_marks,
+min(marks) over(partition by course) Min_marks from school;
  
+select name, course, marks, count(*) over(partition by course) from school;
  
+select name, course, marks, avg(marks) over(partition by course) Average, 
+case 
+	when marks > avg(marks) over(partition by course) then "Above Average"
+    when marks < avg(marks) over(partition by course) then "Below Average"
+    else "Average"
+    end as "Performane" from school order by course, marks desc;
+
+ use khan;
+ select * from school;
  
+ select name, course , marks , rank() over(partition by course order by marks desc) ranking from school;
  
+ select city ,name , marks , avg(marks) over(partition by city) Avg_per_city from school;
  
+ select city ,name , marks , sum(marks) over(partition by city order by ID) running_total from school;
  
+select * from (
+select course ,name , marks , avg(marks) over(partition by course) average from school)t
+where marks > average
+;
+select course ,name , marks , lead(marks) over(partition by course) from school;
  
- 
- 
- 
- 
- 
- 
- 
- 
+
  
  
  
