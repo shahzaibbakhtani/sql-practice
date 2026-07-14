@@ -1,0 +1,258 @@
+use datawarehouseanalytics;
+set SQL_SAFE_Updates = 0;
+
+rename table dim_customers to customers;
+
+select  * from dim_customers;
+
+select * from sales;
+
+select coalesce(month(order_date), "Null") Month_num , avg(sales_amount) 
+over(partition by Month(order_date)) Average from sales order by Average desc ;
+
+
+select year(order_date) Sales_Year , format(sum(sales_amount), "No") Total_Sales , 
+count(distinct customer_key) as Total_customers from sales group by Sales_Year
+having Sales_Year is not null order by Sales_Year;
+
+select Month(order_date) Sales_Month , format(sum(sales_amount), "No") Total_Sales , 
+count(distinct customer_key) as Total_customers, count(quantity) as Total_quantity
+from sales group by Sales_Month
+having Sales_Month is not null order by Sales_Month;
+
+select month(order_date) Sales_Month , 
+sum(sales_amount) Sales_per_month from sales where month(order_date) is not null
+group by month(order_date) 
+order by  month(order_date)
+;
+
+use datawarehouseanalytics;
+
+select * , sum(Sales_per_month) over(order by Sales_month) "Running Total" from (
+	select month(order_date) Sales_Month , 
+	sum(sales_amount) Sales_per_month from sales where month(order_date) is not null
+	group by month(order_date) 
+	order by  month(order_date))t
+	;
+    
+select order_date , isnull(order_date) from sales
+where order_date is null;  
+
+-- Performance Analysis -- 
+
+select * , Yearly_Average - Average as Diff from (
+	select year(order_date) Sales_Year , avg(sales_amount)
+	over(partition by year(order_date)) Yearly_Average, avg(sales_amount) over() Average from sales
+	where order_date is not null)t;
+
+
+
+
+select year(order_date) Year ,avg(sales_amount) Yearly_avg ,
+avg(sales_amount) - (select avg(sales_amount) Average from sales where order_date is not null)
+from sales where order_date is not null 
+group by year(order_date)
+;
+
+select * , 
+Case 
+	when Diff > 1000 then "Super Year"
+    when Diff > 500 then "Average Year"
+    when Diff > 0 then "Decent Year"
+    else "Worst Year" 
+end  as Comments
+from(
+select Year ,Yearly_avg, avg(Yearly_avg) over() Total_avg ,
+Yearly_avg - avg(Yearly_avg) over() as Diff
+ from (
+	select Year(order_date) as Year, avg(sales_amount) Yearly_avg 
+	from sales where order_date is not null
+	group by Year(order_date))t)f order by Year; 
+
+-- Product Trend Analysis--
+
+with Yearly_sale as
+(select Year(S.order_date) as Year , 
+P.product_name , sum(S.sales_amount) Total_sales
+from products P  left join sales S 
+on P.product_key = S.product_key
+where order_date is not null
+group by Year(S.order_date), P.product_name)
+ 
+select * , avg(Total_sales) over(partition by product_name) Average ,
+Total_sales - avg(Total_sales) over(partition by product_name) as Diff,
+Case 
+	when Total_sales - avg(Total_sales) over(partition by product_name)  > 0 then "Above Average"
+    when Total_sales - avg(Total_sales) over(partition by product_name)  <0 then "Below Average"
+    else "Average"
+end as avg_changes,
+lag(Total_Sales) over(partition by product_name order by Year) py_sales,
+Total_sales - lag(Total_Sales) over(partition by product_name order by Year) as diff,
+Case 
+	when Total_sales - lag(Total_Sales) over(partition by product_name order by Year)  > 0 then "Increasing"
+    when Total_sales - lag(Total_Sales) over(partition by product_name order by Year)  < 0 then "Decrease"
+    else "No Change"
+end as py_changes
+from Yearly_sale
+order by product_name  , Year;
+
+
+-- Part to whole analysis --
+
+with C_Sales as 
+(select P.category , sum(S.sales_amount) Category_sales from sales S
+left join products P
+on S.product_key = P.product_key
+group by P.category),
+
+Category_percentage as 
+(select * , format(sum(Category_sales) over(),"NO") Total_sales , 
+CONCAT(ROUND(CAST(Category_sales AS DECIMAL(10,2)) / SUM(Category_sales) OVER() * 100, 1), '%') AS Percentage
+FROM C_Sales)
+
+select * , Rank() over(order by Percentage desc) as Ranking from 
+Category_percentage
+;
+
+-- Customers per categories -- 
+with T_cust as 
+(select P.category  , count(S.customer_key) as customers_per_category  from sales S
+join products P 
+on S.product_key = P.product_key
+group by P.category )
+
+select *  , sum(customers_per_category) over() as Total_customers,
+round(customers_per_category / sum(customers_per_category) over() * 100,2) as percent_per_category,
+rank() over(order by customers_per_category desc) as Ranking
+from T_cust ;
+
+-- Data Segmentation -- 
+
+select * from customers C
+join sales S 
+on S.customer_key = C.customer_key;
+
+select P.product_name , S.cost from products P
+join sales S
+on P.product_key = S.product_key;
+
+select min(cost) , avg(cost) , Max(cost) from products;
+
+with C_types as 
+(select
+case 
+	 when cost > 1500 then "Above 1500"
+     when cost between 1000 and 1500 then "1000-15000"
+     when cost between 500 and 1000 then "500-1000"
+     when cost between 100 and 500 then "100-500"
+     else "Below 100"
+end as Cost_Types
+,product_name 
+from products)
+
+select Cost_Types , count(product_name) Total_product_per_type
+from C_types
+group by Cost_Types
+order by Total_product_per_type desc ;
+
+
+
+-- Grouping customers based on spending habbits and duration -- 
+
+with customer_data as
+(select C.customer_key , min(S.order_date) First_order , max(S.order_date) Last_order,
+sum(S.sales_amount) Total_spending,
+timestampdiff(Month, min(S.order_date), max(S.order_date)) as Gap
+from customers C
+join sales S 
+on S.customer_key = C.customer_key
+group by C.customer_key),
+
+Segment as (
+select customer_key , Gap
+,Total_spending,
+case 
+	when Total_spending >= 5000 and Gap >= 12 then "Vip Customer"
+    when Total_spending <= 5000 and Gap >= 12 then "Regular Customer"
+    else "New Customer" 
+    
+end as Customers_Segments
+from customer_data)
+
+select Customers_Segments , count(customer_key) Total  from Segment
+group by Customers_Segments;
+
+
+-- Month-over-Month Sales Growth Rate --
+
+with Monthly as
+(select year(order_date) Yr, month(order_date) Mo, sum(sales_amount) Monthly_Sales
+from sales where order_date is not null
+group by year(order_date), month(order_date))
+
+select *,
+lag(Monthly_Sales) over(order by Yr, Mo) as Prev_Month_Sales,
+round((Monthly_Sales - lag(Monthly_Sales) over(order by Yr, Mo))
+	/ lag(Monthly_Sales) over(order by Yr, Mo) * 100, 2) as MoM_Growth_Pct
+from Monthly
+order by Yr, Mo;
+
+
+-- Customer Retention (Repeat vs One-Time) --
+
+with Order_Counts as
+(select customer_key, count(distinct order_date) as Order_Count
+from sales
+group by customer_key)
+
+select
+	case when Order_Count = 1 then "One-Time Customer" else "Repeat Customer" end as Customer_Type,
+	count(customer_key) as Total_Customers,
+	round(count(customer_key) / sum(count(customer_key)) over() * 100, 2) as Percentage
+from Order_Counts
+group by Customer_Type;
+
+
+-- Top 3 Products per Category by Sales --
+
+with Product_Sales as
+(select P.category, P.product_name, sum(S.sales_amount) as Total_Sales
+from products P
+join sales S on P.product_key = S.product_key
+group by P.category, P.product_name),
+
+Ranked as
+(select *, rank() over(partition by category order by Total_Sales desc) as Rnk
+from Product_Sales)
+
+select category, product_name, Total_Sales, Rnk
+from Ranked
+where Rnk <= 3
+order by category, Rnk;
+
+
+-- Pareto Analysis (80/20 Rule) on Products --
+
+with Product_Sales as
+(select P.product_name, sum(S.sales_amount) as Total_Sales
+from products P
+join sales S on P.product_key = S.product_key
+group by P.product_name),
+
+Cumulative as
+(select *,
+	sum(Total_Sales) over(order by Total_Sales desc) as Running_Total,
+	sum(Total_Sales) over() as Grand_Total
+from Product_Sales)
+
+select *,
+	round(Running_Total / Grand_Total * 100, 2) as Cumulative_Pct,
+	case when Running_Total / Grand_Total * 100 <= 80 then "Top 80% Contributor" else "Bottom 20%" end as Pareto_Segment
+from Cumulative
+order by Total_Sales desc;
+    
+    
+    
+
+
+
